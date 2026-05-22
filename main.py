@@ -1,6 +1,8 @@
 import os
 import base64
 import sqlite3
+import logging
+from math import ceil
 
 from telegram import (
     Update,
@@ -18,6 +20,14 @@ from telegram.ext import (
     filters
 )
 
+# =========================================================
+# LOGGING
+# =========================================================
+
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
 
 # =========================================================
 # CONFIG
@@ -45,6 +55,10 @@ ADMIN_USERNAME = os.getenv(
     "ADMIN_USERNAME"
 )
 
+BOT_USERNAME = os.getenv(
+    "BOT_USERNAME"
+)
+
 # =========================================================
 # SQLITE
 # =========================================================
@@ -57,7 +71,7 @@ conn = sqlite3.connect(
 db = conn.cursor()
 
 # =========================================================
-# CREATE TABLE USERS
+# TABLE USERS
 # =========================================================
 
 db.execute("""
@@ -70,14 +84,15 @@ CREATE TABLE IF NOT EXISTS users(
 """)
 
 # =========================================================
-# CREATE TABLE CODES
+# TABLE CODES
 # =========================================================
 
 db.execute("""
 CREATE TABLE IF NOT EXISTS codes(
     code TEXT,
     owner INTEGER,
-    views INTEGER DEFAULT 0
+    views INTEGER DEFAULT 0,
+    total INTEGER DEFAULT 0
 )
 """)
 
@@ -98,10 +113,7 @@ user_notif = {}
 def add_user(user_id, username):
 
     db.execute(
-        """
-        SELECT * FROM users
-        WHERE user_id=?
-        """,
+        "SELECT * FROM users WHERE user_id=?",
         (user_id,)
     )
 
@@ -177,24 +189,38 @@ def check_limit(user_id, total_media):
         user_id
     )
 
-    # FREE
     if plan == "FREE":
 
         if opened + total_media > 25:
             return False
 
-    # VIP
     elif plan == "VIP":
 
         if opened + total_media > 100:
             return False
 
-    # VVIP
     elif plan == "VVIP":
-
         return True
 
     return True
+
+# =========================================================
+# MAIN MENU
+# =========================================================
+
+def main_menu():
+
+    keyboard = [
+        ["Start🚀", "Trending🔥"],
+        ["New 🆕", "My Code📁"],
+        ["My Account🧑‍🏫"],
+        ["Help📃", "Admin🧑‍💼"]
+    ]
+
+    return ReplyKeyboardMarkup(
+        keyboard,
+        resize_keyboard=True
+    )
 
 # =========================================================
 # UPGRADE BUTTON
@@ -255,10 +281,7 @@ def decode_code(code):
 # FORCE SUB CHECK
 # =========================================================
 
-async def subscribed(
-    user_id,
-    bot
-):
+async def subscribed(user_id, bot):
 
     try:
 
@@ -272,47 +295,43 @@ async def subscribed(
             user_id
         )
 
-        if channel.status in [
+        ok1 = channel.status in [
             "member",
             "administrator",
             "creator"
-        ] and group.status in [
+        ]
+
+        ok2 = group.status in [
             "member",
             "administrator",
             "creator"
-        ]:
+        ]
 
-            return True
-
-        return False
+        return ok1 and ok2
 
     except:
         return False
 
 # =========================================================
-# FORCE SUB MESSAGE
+# FORCE MESSAGE
 # =========================================================
 
-async def force_sub_message(
-    update
-):
+async def force_sub_message(update):
 
     buttons = InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton(
-                    "Join Channel",
+                    "📢 Join Channel",
                     url=f"https://t.me/{FORCE_CHANNEL.replace('@','')}"
                 )
             ],
-
             [
                 InlineKeyboardButton(
-                    "Join Group",
+                    "👥 Join Group",
                     url=f"https://t.me/{FORCE_GROUP.replace('@','')}"
                 )
             ],
-
             [
                 InlineKeyboardButton(
                     "✅ Joined",
@@ -325,38 +344,15 @@ async def force_sub_message(
     await update.message.reply_text(
 """
 ❌ You must join channel and group first.
-
-After joining click ✅ Joined
 """,
         reply_markup=buttons
-    )
-
-# =========================================================
-# MAIN MENU
-# =========================================================
-
-def main_menu():
-
-    keyboard = [
-        ["Start🚀", "Trending🔥"],
-        ["New 🆕", "My Code📁"],
-        ["My Account🧑‍🏫"],
-        ["Help📃", "Admin🧑‍💼"]
-    ]
-
-    return ReplyKeyboardMarkup(
-        keyboard,
-        resize_keyboard=True
     )
 
 # =========================================================
 # START
 # =========================================================
 
-async def start(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.effective_user
 
@@ -371,17 +367,16 @@ async def start(
     )
 
     if not check:
+        return await force_sub_message(update)
 
-        return await force_sub_message(
-            update
-        )
+    text = f"""
+🚀 Welcome to KXBOT
 
-    text = """
-Welcome to KXBOT 🚀
-
-Send media to me and I will create code.
+Send media to me and I will create permanent code.
 
 Send code to me and I will send media.
+
+🤖 @{BOT_USERNAME}
 """
 
     await update.message.reply_text(
@@ -393,10 +388,7 @@ Send code to me and I will send media.
 # CHECK JOIN
 # =========================================================
 
-async def check_join(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def check_join(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
 
@@ -410,7 +402,7 @@ async def check_join(
     if not check:
 
         return await query.answer(
-            "Join channel and group first",
+            "Join first",
             show_alert=True
         )
 
@@ -418,11 +410,7 @@ async def check_join(
 
     await context.bot.send_message(
         chat_id=query.message.chat.id,
-        text="""
-✅ Verification success
-
-Welcome to KXBOT 🚀
-""",
+        text="✅ Verification Success",
         reply_markup=main_menu()
     )
 
@@ -430,23 +418,17 @@ Welcome to KXBOT 🚀
 # SAVE MEDIA
 # =========================================================
 
-async def save_media(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def save_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    user_id = update.effective_user.id
 
     check = await subscribed(
-        update.effective_user.id,
+        user_id,
         context.bot
     )
 
     if not check:
-
-        return await force_sub_message(
-            update
-        )
-
-    user_id = update.effective_user.id
+        return await force_sub_message(update)
 
     copied = await context.bot.copy_message(
         chat_id=DB_CHANNEL,
@@ -477,7 +459,7 @@ async def save_media(
     )
 
     text = f"""
-📥 Media Added Successfully
+📥 Media Added
 
 📦 Total Media : {total}
 
@@ -519,10 +501,7 @@ Click button below to create code.
 # CREATE CODE
 # =========================================================
 
-async def create_code(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def create_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
 
@@ -535,7 +514,7 @@ async def create_code(
     if not ids:
 
         return await query.message.reply_text(
-            "❌ No media found"
+            "❌ No media"
         )
 
     code = encode_code(ids)
@@ -546,13 +525,15 @@ async def create_code(
         """
         INSERT INTO codes(
             code,
-            owner
+            owner,
+            total
         )
-        VALUES(?,?)
+        VALUES(?,?,?)
         """,
         (
             code,
-            user_id
+            user_id,
+            total
         )
     )
 
@@ -560,13 +541,13 @@ async def create_code(
 
     try:
 
-        notif_id = user_notif.get(user_id)
+        notif = user_notif.get(user_id)
 
-        if notif_id:
+        if notif:
 
             await context.bot.delete_message(
                 chat_id=query.message.chat.id,
-                message_id=notif_id
+                message_id=notif
             )
 
     except:
@@ -574,7 +555,7 @@ async def create_code(
 
     await query.message.reply_text(
 f"""
-✅ Code Created Successfully
+✅ Code Created
 
 📦 Total Media : {total}
 
@@ -591,14 +572,84 @@ f"""
         del user_notif[user_id]
 
 # =========================================================
+# SEND PAGE
+# =========================================================
+
+async def send_page(
+    update,
+    context,
+    code,
+    page
+):
+
+    ids = decode_code(code)
+
+    user_id = update.effective_user.id
+
+    plan, opened = get_user_plan(
+        user_id
+    )
+
+    protect = True
+
+    if plan in ["VIP", "VVIP"]:
+        protect = False
+
+    pages = [
+        ids[i:i + 10]
+        for i in range(
+            0,
+            len(ids),
+            10
+        )
+    ]
+
+    selected = pages[page]
+
+    for msg_id in selected:
+
+        try:
+
+            await context.bot.copy_message(
+                chat_id=update.effective_chat.id,
+                from_chat_id=DB_CHANNEL,
+                message_id=msg_id,
+                protect_content=protect
+            )
+
+        except:
+            pass
+
+    update_opened(
+        user_id,
+        len(selected)
+    )
+
+    total_pages = len(pages)
+
+    row = []
+
+    for i in range(total_pages):
+
+        if i == page:
+            txt = f"🔵{i+1}"
+        else:
+            txt = f"🔴{i+1}"
+
+        row.append(
+            InlineKeyboardButton(
+                txt,
+                callback_data=f"page_{i}_{code}"
+            )
+        )
+
+    return InlineKeyboardMarkup([row])
+
+# =========================================================
 # OPEN CODE
 # =========================================================
 
-async def open_code(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    code
-):
+async def open_code(update: Update, context: ContextTypes.DEFAULT_TYPE, code):
 
     try:
 
@@ -634,11 +685,9 @@ Reason:
 
             return await update.message.reply_text(
 """
-❌ FREE PLAN LIMIT REACHED
+❌ FREE LIMIT REACHED
 
-📦 Daily Limit : 25 Media
-
-Upgrade your account to continue.
+📦 25 Media / Day
 """,
                 reply_markup=upgrade_button()
             )
@@ -647,50 +696,18 @@ Upgrade your account to continue.
 
             return await update.message.reply_text(
 """
-❌ VIP PLAN LIMIT REACHED
+❌ VIP LIMIT REACHED
 
-📦 Daily Limit : 100 Media
-
-Please renew your VIP plan.
+📦 100 Media / Day
 """,
                 reply_markup=upgrade_button()
             )
 
-    protect = True
-
-    if plan in ["VIP", "VVIP"]:
-        protect = False
-
-    pages = [
-        ids[i:i + 10]
-        for i in range(
-            0,
-            len(ids),
-            10
-        )
-    ]
-
-    total_pages = len(pages)
-
-    first_page = pages[0]
-
-    for msg_id in first_page:
-
-        try:
-
-            await context.bot.copy_message(
-                chat_id=update.effective_chat.id,
-                from_chat_id=DB_CHANNEL,
-                message_id=msg_id,
-                protect_content=protect
-            )
-
-        except:
-            pass
-
-    update_opened(
-        user_id,
-        len(first_page)
+    keyboard = await send_page(
+        update,
+        context,
+        code,
+        0
     )
 
     db.execute(
@@ -704,21 +721,9 @@ Please renew your VIP plan.
 
     conn.commit()
 
-    row = []
-
-    for i in range(total_pages):
-
-        if i == 0:
-            txt = f"🔵{i+1}"
-        else:
-            txt = f"🔴{i+1}"
-
-        row.append(
-            InlineKeyboardButton(
-                txt,
-                callback_data=f"page_{i}_{code}"
-            )
-        )
+    total_pages = ceil(
+        len(ids) / 10
+    )
 
     await update.message.reply_text(
 f"""
@@ -728,19 +733,14 @@ f"""
 
 💎 Plan : {plan}
 """,
-        reply_markup=InlineKeyboardMarkup(
-            [row]
-        )
+        reply_markup=keyboard
     )
 
 # =========================================================
 # PAGE CALLBACK
 # =========================================================
 
-async def page_callback(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
 
@@ -754,115 +754,39 @@ async def page_callback(
 
     ids = decode_code(code)
 
-    user_id = query.from_user.id
-
-    plan, opened = get_user_plan(
-        user_id
+    keyboard = await send_page(
+        query,
+        context,
+        code,
+        page
     )
 
-    protect = True
-
-    if plan in ["VIP", "VVIP"]:
-        protect = False
-
-    pages = [
-        ids[i:i + 10]
-        for i in range(
-            0,
-            len(ids),
-            10
-        )
-    ]
-
-    selected_page = pages[page]
-
-    for msg_id in selected_page:
-
-        try:
-
-            await context.bot.copy_message(
-                chat_id=query.message.chat.id,
-                from_chat_id=DB_CHANNEL,
-                message_id=msg_id,
-                protect_content=protect
-            )
-
-        except:
-            pass
-
-    update_opened(
-        user_id,
-        len(selected_page)
+    total_pages = ceil(
+        len(ids) / 10
     )
-
-    total_pages = len(pages)
-
-    row = []
-
-    for i in range(total_pages):
-
-        if i == page:
-            txt = f"🔵{i+1}"
-        else:
-            txt = f"🔴{i+1}"
-
-        row.append(
-            InlineKeyboardButton(
-                txt,
-                callback_data=f"page_{i}_{code}"
-            )
-        )
 
     await query.message.edit_text(
 f"""
 📄 Current Page : {page+1}/{total_pages}
 
 📦 Total Media : {len(ids)}
-
-💎 Plan : {plan}
 """,
-        reply_markup=InlineKeyboardMarkup(
-            [row]
-        )
+        reply_markup=keyboard
     )
 
 # =========================================================
-# TEXT MENU
+# TEXT HANDLER
 # =========================================================
 
-async def text_handler(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
-
-    check = await subscribed(
-        update.effective_user.id,
-        context.bot
-    )
-
-    if not check:
-
-        return await force_sub_message(
-            update
-        )
+async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = update.message.text
 
-    # =====================================================
     # START
-    # =====================================================
-
     if text == "Start🚀":
+        return await start(update, context)
 
-        return await start(
-            update,
-            context
-        )
-
-    # =====================================================
     # TRENDING
-    # =====================================================
-
     elif text == "Trending🔥":
 
         db.execute(
@@ -893,14 +817,9 @@ async def text_handler(
 
 """
 
-        return await update.message.reply_text(
-            txt
-        )
+        return await update.message.reply_text(txt)
 
-    # =====================================================
     # NEW
-    # =====================================================
-
     elif text == "New 🆕":
 
         db.execute(
@@ -917,23 +836,17 @@ async def text_handler(
         if not data:
 
             return await update.message.reply_text(
-                "No new code"
+                "No code"
             )
 
         txt = "🆕 NEW CODES\n\n"
 
         for x in data:
-
             txt += f"🔑 {x[0]}\n\n"
 
-        return await update.message.reply_text(
-            txt
-        )
+        return await update.message.reply_text(txt)
 
-    # =====================================================
     # MY CODE
-    # =====================================================
-
     elif text == "My Code📁":
 
         db.execute(
@@ -941,7 +854,7 @@ async def text_handler(
             SELECT code, views
             FROM codes
             WHERE owner=?
-            ORDER BY rowid DESC
+            ORDER BY views DESC
             """,
             (update.effective_user.id,)
         )
@@ -951,7 +864,7 @@ async def text_handler(
         if not data:
 
             return await update.message.reply_text(
-                "No code found"
+                "No code"
             )
 
         txt = "📁 MY CODES\n\n"
@@ -965,14 +878,9 @@ async def text_handler(
 
 """
 
-        return await update.message.reply_text(
-            txt
-        )
+        return await update.message.reply_text(txt)
 
-    # =====================================================
     # ACCOUNT
-    # =====================================================
-
     elif text == "My Account🧑‍🏫":
 
         user = update.effective_user
@@ -997,7 +905,7 @@ f"""
 📦 Daily Opened :
 {opened}
 
-💰 VIP PRICE
+💰 PRICE
 
 VIP
 1D = 15K
@@ -1012,39 +920,33 @@ VVIP
             reply_markup=upgrade_button()
         )
 
-    # =====================================================
     # HELP
-    # =====================================================
-
     elif text == "Help📃":
 
         return await update.message.reply_text(
 """
-📃 HOW TO USE BOT
+📃 HOW TO USE
 
-1. Send media to bot
-2. Click Create Code
-3. Copy generated code
-4. Send code to open media
+1. Send media
+2. Click create code
+3. Copy code
+4. Send code
 
-💎 FREE PLAN
+💎 FREE
 • 25 media/day
-• Cannot forward media
+• no forward
 
-💎 VIP PLAN
+💎 VIP
 • 100 media/day
-• Can forward media
+• can forward
 
-💎 VVIP PLAN
-• Unlimited media
-• Unlimited forwarding
+💎 VVIP
+• unlimited
+• unlimited forward
 """
         )
 
-    # =====================================================
     # ADMIN
-    # =====================================================
-
     elif text == "Admin🧑‍💼":
 
         if update.effective_user.id != ADMIN_ID:
@@ -1054,19 +956,13 @@ VVIP
             )
 
         db.execute(
-            """
-            SELECT COUNT(*)
-            FROM users
-            """
+            "SELECT COUNT(*) FROM users"
         )
 
         users = db.fetchone()[0]
 
         db.execute(
-            """
-            SELECT COUNT(*)
-            FROM codes
-            """
+            "SELECT COUNT(*) FROM codes"
         )
 
         codes = db.fetchone()[0]
@@ -1081,13 +977,8 @@ f"""
 """
         )
 
-    # =====================================================
     # OPEN CODE
-    # =====================================================
-
-    elif text.startswith(
-        "kxfilebot_"
-    ):
+    elif text.startswith("kxfilebot_"):
 
         return await open_code(
             update,
@@ -1095,4 +986,109 @@ f"""
             text
         )
 
-# =========== 
+# =========================================================
+# VIP COMMAND
+# =========================================================
+
+async def vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    try:
+
+        user_id = int(
+            context.args[0]
+        )
+
+        plan = context.args[1]
+
+    except:
+
+        return await update.message.reply_text(
+"""
+Usage:
+
+/vip user_id VIP
+/vip user_id VVIP
+"""
+        )
+
+    db.execute(
+        """
+        UPDATE users
+        SET plan=?
+        WHERE user_id=?
+        """,
+        (
+            plan,
+            user_id
+        )
+    )
+
+    conn.commit()
+
+    await update.message.reply_text(
+        f"✅ {user_id} upgraded to {plan}"
+    )
+
+# =========================================================
+# BROADCAST
+# =========================================================
+
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    text = " ".join(context.args)
+
+    if not text:
+
+        return await update.message.reply_text(
+            "/broadcast your message"
+        )
+
+    db.execute(
+        "SELECT user_id FROM users"
+    )
+
+    users = db.fetchall()
+
+    success = 0
+
+    for user in users:
+
+        try:
+
+            await context.bot.send_message(
+                chat_id=user[0],
+                text=text
+            )
+
+            success += 1
+
+        except:
+            pass
+
+    await update.message.reply_text(
+        f"✅ Broadcast sent to {success} users"
+    )
+
+# =========================================================
+# APPLICATION
+# =========================================================
+
+app = Application.builder().token(
+    BOT_TOKEN
+).build()
+
+# COMMANDS
+app.add_handler(
+    CommandHandler(
+        "start",
+        start
+    )
+)
+
+app.add_han
