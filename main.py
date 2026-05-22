@@ -1,4 +1,6 @@
+import os
 import base64
+import sqlite3
 
 from telegram import (
     Update,
@@ -16,16 +18,11 @@ from telegram.ext import (
     filters
 )
 
-# =========================================
+# =========================================================
 # CONFIG
-# =========================================
+# =========================================================
 
-import os
-import os
-
-BOT_TOKEN = os.getenv(
-    "BOT_TOKEN"
-)
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 DB_CHANNEL = int(
     os.getenv("DB_CHANNEL")
@@ -42,19 +39,188 @@ FORCE_CHANNEL = os.getenv(
 FORCE_GROUP = os.getenv(
     "FORCE_GROUP"
 )
-# =========================================
+
+ADMIN_USERNAME = os.getenv(
+    "ADMIN_USERNAME"
+)
+
+# =========================================================
+# SQLITE
+# =========================================================
+
+conn = sqlite3.connect(
+    "database.db",
+    check_same_thread=False
+)
+
+db = conn.cursor()
+
+# =========================================================
+# CREATE TABLE USERS
+# =========================================================
+
+db.execute("""
+CREATE TABLE IF NOT EXISTS users(
+    user_id INTEGER PRIMARY KEY,
+    username TEXT,
+    plan TEXT DEFAULT 'FREE',
+    opened INTEGER DEFAULT 0
+)
+""")
+
+# =========================================================
+# CREATE TABLE CODES
+# =========================================================
+
+db.execute("""
+CREATE TABLE IF NOT EXISTS codes(
+    code TEXT,
+    owner INTEGER,
+    views INTEGER DEFAULT 0
+)
+""")
+
+conn.commit()
+
+# =========================================================
 # TEMP STORAGE
-# =========================================
+# =========================================================
 
 user_media = {}
 
-# =========================================
+user_notif = {}
+
+# =========================================================
+# ADD USER
+# =========================================================
+
+def add_user(user_id, username):
+
+    db.execute(
+        """
+        SELECT * FROM users
+        WHERE user_id=?
+        """,
+        (user_id,)
+    )
+
+    data = db.fetchone()
+
+    if data is None:
+
+        db.execute(
+            """
+            INSERT INTO users(
+                user_id,
+                username
+            )
+            VALUES(?,?)
+            """,
+            (
+                user_id,
+                username
+            )
+        )
+
+        conn.commit()
+
+# =========================================================
+# GET PLAN
+# =========================================================
+
+def get_user_plan(user_id):
+
+    db.execute(
+        """
+        SELECT plan, opened
+        FROM users
+        WHERE user_id=?
+        """,
+        (user_id,)
+    )
+
+    data = db.fetchone()
+
+    if not data:
+        return "FREE", 0
+
+    return data[0], data[1]
+
+# =========================================================
+# UPDATE OPENED
+# =========================================================
+
+def update_opened(user_id, total):
+
+    db.execute(
+        """
+        UPDATE users
+        SET opened = opened + ?
+        WHERE user_id=?
+        """,
+        (
+            total,
+            user_id
+        )
+    )
+
+    conn.commit()
+
+# =========================================================
+# CHECK LIMIT
+# =========================================================
+
+def check_limit(user_id, total_media):
+
+    plan, opened = get_user_plan(
+        user_id
+    )
+
+    # FREE
+    if plan == "FREE":
+
+        if opened + total_media > 25:
+            return False
+
+    # VIP
+    elif plan == "VIP":
+
+        if opened + total_media > 100:
+            return False
+
+    # VVIP
+    elif plan == "VVIP":
+
+        return True
+
+    return True
+
+# =========================================================
+# UPGRADE BUTTON
+# =========================================================
+
+def upgrade_button():
+
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "💎 Upgrade Plan",
+                    url=f"https://t.me/{ADMIN_USERNAME}"
+                )
+            ]
+        ]
+    )
+
+# =========================================================
 # ENCODE CODE
-# =========================================
+# =========================================================
 
 def encode_code(ids):
 
-    text = "-".join(map(str, ids))
+    text = "-".join(
+        map(str, ids)
+    )
 
     encoded = base64.urlsafe_b64encode(
         text.encode()
@@ -62,9 +228,9 @@ def encode_code(ids):
 
     return f"kxfilebot_{encoded}"
 
-# =========================================
+# =========================================================
 # DECODE CODE
-# =========================================
+# =========================================================
 
 def decode_code(code):
 
@@ -84,9 +250,9 @@ def decode_code(code):
         )
     )
 
-# =========================================
+# =========================================================
 # FORCE SUB CHECK
-# =========================================
+# =========================================================
 
 async def subscribed(
     user_id,
@@ -122,9 +288,9 @@ async def subscribed(
     except:
         return False
 
-# =========================================
+# =========================================================
 # FORCE SUB MESSAGE
-# =========================================
+# =========================================================
 
 async def force_sub_message(
     update
@@ -164,9 +330,9 @@ After joining click ✅ Joined
         reply_markup=buttons
     )
 
-# =========================================
+# =========================================================
 # MAIN MENU
-# =========================================
+# =========================================================
 
 def main_menu():
 
@@ -182,17 +348,24 @@ def main_menu():
         resize_keyboard=True
     )
 
-# =========================================
+# =========================================================
 # START
-# =========================================
+# =========================================================
 
 async def start(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
 
+    user = update.effective_user
+
+    add_user(
+        user.id,
+        user.username
+    )
+
     check = await subscribed(
-        update.effective_user.id,
+        user.id,
         context.bot
     )
 
@@ -215,9 +388,9 @@ Send code to me and I will send media.
         reply_markup=main_menu()
     )
 
-# =========================================
-# CHECK JOIN BUTTON
-# =========================================
+# =========================================================
+# CHECK JOIN
+# =========================================================
 
 async def check_join(
     update: Update,
@@ -242,8 +415,9 @@ async def check_join(
 
     await query.message.delete()
 
-    await query.message.chat.send_message(
-"""
+    await context.bot.send_message(
+        chat_id=query.message.chat.id,
+        text="""
 ✅ Verification success
 
 Welcome to KXBOT 🚀
@@ -251,9 +425,9 @@ Welcome to KXBOT 🚀
         reply_markup=main_menu()
     )
 
-# =========================================
+# =========================================================
 # SAVE MEDIA
-# =========================================
+# =========================================================
 
 async def save_media(
     update: Update,
@@ -290,42 +464,11 @@ async def save_media(
         user_media[user_id]
     )
 
-    video = 0
-    photo = 0
-    document = 0
-
-    for msg_id in user_media[user_id]:
-
-        try:
-
-            msg = await context.bot.forward_message(
-                chat_id=user_id,
-                from_chat_id=DB_CHANNEL,
-                message_id=msg_id
-            )
-
-            if msg.video:
-                video += 1
-
-            elif msg.photo:
-                photo += 1
-
-            elif msg.document:
-                document += 1
-
-            await context.bot.delete_message(
-                chat_id=user_id,
-                message_id=msg.message_id
-            )
-
-        except:
-            pass
-
     keyboard = InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton(
-                    "Create",
+                    "✅ Create Code",
                     callback_data="create_code"
                 )
             ]
@@ -333,21 +476,47 @@ async def save_media(
     )
 
     text = f"""
-✅ {total} media received
+📥 Media Added Successfully
 
-🎥 Video : {video}
-🖼 Photo : {photo}
-📄 Document : {document}
+📦 Total Media : {total}
+
+Click button below to create code.
 """
 
-    await update.message.reply_text(
-        text,
-        reply_markup=keyboard
-    )
+    try:
 
-# =========================================
+        old_msg = user_notif.get(user_id)
+
+        if old_msg:
+
+            await context.bot.edit_message_text(
+                chat_id=update.effective_chat.id,
+                message_id=old_msg,
+                text=text,
+                reply_markup=keyboard
+            )
+
+        else:
+
+            msg = await update.message.reply_text(
+                text,
+                reply_markup=keyboard
+            )
+
+            user_notif[user_id] = msg.message_id
+
+    except:
+
+        msg = await update.message.reply_text(
+            text,
+            reply_markup=keyboard
+        )
+
+        user_notif[user_id] = msg.message_id
+
+# =========================================================
 # CREATE CODE
-# =========================================
+# =========================================================
 
 async def create_code(
     update: Update,
@@ -365,14 +534,50 @@ async def create_code(
     if not ids:
 
         return await query.message.reply_text(
-            "No media found"
+            "❌ No media found"
         )
 
     code = encode_code(ids)
 
+    total = len(ids)
+
+    db.execute(
+        """
+        INSERT INTO codes(
+            code,
+            owner
+        )
+        VALUES(?,?)
+        """,
+        (
+            code,
+            user_id
+        )
+    )
+
+    conn.commit()
+
+    try:
+
+        notif_id = user_notif.get(user_id)
+
+        if notif_id:
+
+            await context.bot.delete_message(
+                chat_id=query.message.chat.id,
+                message_id=notif_id
+            )
+
+    except:
+        pass
+
     await query.message.reply_text(
 f"""
 ✅ Code Created Successfully
+
+📦 Total Media : {total}
+
+🔑 CODE:
 
 <code>{code}</code>
 """,
@@ -381,9 +586,12 @@ f"""
 
     user_media[user_id] = []
 
-# =========================================
+    if user_id in user_notif:
+        del user_notif[user_id]
+
+# =========================================================
 # OPEN CODE
-# =========================================
+# =========================================================
 
 async def open_code(
     update: Update,
@@ -400,6 +608,52 @@ async def open_code(
         return await update.message.reply_text(
             "❌ Invalid code"
         )
+
+    user_id = update.effective_user.id
+
+    total_media = len(ids)
+
+    allowed = check_limit(
+        user_id,
+        total_media
+    )
+
+    plan, opened = get_user_plan(
+        user_id
+    )
+
+    if not allowed:
+
+        if plan == "FREE":
+
+            return await update.message.reply_text(
+"""
+❌ FREE PLAN LIMIT REACHED
+
+📦 Daily Limit : 25 Media
+
+Upgrade your account to continue.
+""",
+                reply_markup=upgrade_button()
+            )
+
+        elif plan == "VIP":
+
+            return await update.message.reply_text(
+"""
+❌ VIP PLAN LIMIT REACHED
+
+📦 Daily Limit : 100 Media
+
+Please renew your VIP plan.
+""",
+                reply_markup=upgrade_button()
+            )
+
+    protect = True
+
+    if plan in ["VIP", "VVIP"]:
+        protect = False
 
     pages = [
         ids[i:i + 10]
@@ -422,11 +676,27 @@ async def open_code(
                 chat_id=update.effective_chat.id,
                 from_chat_id=DB_CHANNEL,
                 message_id=msg_id,
-                protect_content=True
+                protect_content=protect
             )
 
         except:
             pass
+
+    update_opened(
+        user_id,
+        len(first_page)
+    )
+
+    db.execute(
+        """
+        UPDATE codes
+        SET views = views + 1
+        WHERE code=?
+        """,
+        (code,)
+    )
+
+    conn.commit()
 
     row = []
 
@@ -447,16 +717,19 @@ async def open_code(
     await update.message.reply_text(
 f"""
 📄 Current Page : 1/{total_pages}
+
 📦 Total Media : {len(ids)}
+
+💎 Plan : {plan}
 """,
         reply_markup=InlineKeyboardMarkup(
             [row]
         )
     )
 
-# =========================================
+# =========================================================
 # PAGE CALLBACK
-# =========================================
+# =========================================================
 
 async def page_callback(
     update: Update,
@@ -474,6 +747,17 @@ async def page_callback(
     code = "_".join(data[2:])
 
     ids = decode_code(code)
+
+    user_id = query.from_user.id
+
+    plan, opened = get_user_plan(
+        user_id
+    )
+
+    protect = True
+
+    if plan in ["VIP", "VVIP"]:
+        protect = False
 
     pages = [
         ids[i:i + 10]
@@ -494,11 +778,16 @@ async def page_callback(
                 chat_id=query.message.chat.id,
                 from_chat_id=DB_CHANNEL,
                 message_id=msg_id,
-                protect_content=True
+                protect_content=protect
             )
 
         except:
             pass
+
+    update_opened(
+        user_id,
+        len(selected_page)
+    )
 
     total_pages = len(pages)
 
@@ -521,16 +810,19 @@ async def page_callback(
     await query.message.edit_text(
 f"""
 📄 Current Page : {page+1}/{total_pages}
+
 📦 Total Media : {len(ids)}
+
+💎 Plan : {plan}
 """,
         reply_markup=InlineKeyboardMarkup(
             [row]
         )
     )
 
-# =========================================
+# =========================================================
 # TEXT MENU
-# =========================================
+# =========================================================
 
 async def text_handler(
     update: Update,
@@ -550,9 +842,9 @@ async def text_handler(
 
     text = update.message.text
 
-    # =====================================
+    # =====================================================
     # START
-    # =====================================
+    # =====================================================
 
     if text == "Start🚀":
 
@@ -561,74 +853,162 @@ async def text_handler(
             context
         )
 
-    # =====================================
+    # =====================================================
     # TRENDING
-    # =====================================
+    # =====================================================
 
     elif text == "Trending🔥":
 
-        return await update.message.reply_text(
-"""
-🔥 Trending Codes
-
-Coming soon...
-"""
+        db.execute(
+            """
+            SELECT code, views
+            FROM codes
+            ORDER BY views DESC
+            LIMIT 10
+            """
         )
 
-    # =====================================
+        data = db.fetchall()
+
+        if not data:
+
+            return await update.message.reply_text(
+                "No trending code"
+            )
+
+        txt = "🔥 TRENDING CODES\n\n"
+
+        for code, views in data:
+
+            txt += f"""
+🔑 {code}
+
+👁 Views : {views}
+
+"""
+
+        return await update.message.reply_text(
+            txt
+        )
+
+    # =====================================================
     # NEW
-    # =====================================
+    # =====================================================
 
     elif text == "New 🆕":
 
-        return await update.message.reply_text(
-"""
-🆕 New Codes
-
-Coming soon...
-"""
+        db.execute(
+            """
+            SELECT code
+            FROM codes
+            ORDER BY rowid DESC
+            LIMIT 10
+            """
         )
 
-    # =====================================
+        data = db.fetchall()
+
+        if not data:
+
+            return await update.message.reply_text(
+                "No new code"
+            )
+
+        txt = "🆕 NEW CODES\n\n"
+
+        for x in data:
+
+            txt += f"🔑 {x[0]}\n\n"
+
+        return await update.message.reply_text(
+            txt
+        )
+
+    # =====================================================
     # MY CODE
-    # =====================================
+    # =====================================================
 
     elif text == "My Code📁":
 
-        return await update.message.reply_text(
-"""
-📁 Your Codes
-
-Coming soon...
-"""
+        db.execute(
+            """
+            SELECT code, views
+            FROM codes
+            WHERE owner=?
+            ORDER BY rowid DESC
+            """,
+            (update.effective_user.id,)
         )
 
-    # =====================================
-    # MY ACCOUNT
-    # =====================================
+        data = db.fetchall()
+
+        if not data:
+
+            return await update.message.reply_text(
+                "No code found"
+            )
+
+        txt = "📁 MY CODES\n\n"
+
+        for code, views in data:
+
+            txt += f"""
+🔑 {code}
+
+👁 Views : {views}
+
+"""
+
+        return await update.message.reply_text(
+            txt
+        )
+
+    # =====================================================
+    # ACCOUNT
+    # =====================================================
 
     elif text == "My Account🧑‍🏫":
 
         user = update.effective_user
 
+        plan, opened = get_user_plan(
+            user.id
+        )
+
         return await update.message.reply_text(
 f"""
 🧑‍🏫 MY ACCOUNT
 
-👤 Username:
+👤 Username :
 @{user.username}
 
-🆔 ID:
+🆔 ID :
 {user.id}
 
-💎 Plan:
-FREE
-"""
+💎 Plan :
+{plan}
+
+📦 Daily Opened :
+{opened}
+
+💰 VIP PRICE
+
+VIP
+1D = 15K
+2D = 20K
+3D = 25K
+4D = 30K
+
+VVIP
+1M = 120K
+2M = 200K
+""",
+            reply_markup=upgrade_button()
         )
 
-    # =====================================
+    # =====================================================
     # HELP
-    # =====================================
+    # =====================================================
 
     elif text == "Help📃":
 
@@ -637,27 +1017,27 @@ FREE
 📃 HOW TO USE BOT
 
 1. Send media to bot
-2. Click Create
+2. Click Create Code
 3. Copy generated code
 4. Send code to open media
 
 💎 FREE PLAN
-• 20 media/day
-• Protected media
+• 25 media/day
+• Cannot forward media
 
 💎 VIP PLAN
 • 100 media/day
-• 50 media shareable
+• Can forward media
 
 💎 VVIP PLAN
-• Unlimited access
-• Unlimited sharing
+• Unlimited media
+• Unlimited forwarding
 """
         )
 
-    # =====================================
+    # =====================================================
     # ADMIN
-    # =====================================
+    # =====================================================
 
     elif text == "Admin🧑‍💼":
 
@@ -667,20 +1047,37 @@ FREE
                 "❌ Admin only"
             )
 
+        db.execute(
+            """
+            SELECT COUNT(*)
+            FROM users
+            """
+        )
+
+        users = db.fetchone()[0]
+
+        db.execute(
+            """
+            SELECT COUNT(*)
+            FROM codes
+            """
+        )
+
+        codes = db.fetchone()[0]
+
         return await update.message.reply_text(
-"""
+f"""
 🧑‍💼 ADMIN PANEL
 
-• Statistics
-• Broadcast
-• Delete Media
-• Users
+👤 Users : {users}
+
+🔑 Codes : {codes}
 """
         )
 
-    # =====================================
+    # =====================================================
     # OPEN CODE
-    # =====================================
+    # =====================================================
 
     elif text.startswith(
         "kxfilebot_"
@@ -692,67 +1089,4 @@ FREE
             text
         )
 
-# =========================================
-# RUN BOT
-# =========================================
-
-app = Application.builder().token(
-    BOT_TOKEN
-).build()
-
-# START
-app.add_handler(
-    CommandHandler(
-        "start",
-        start
-    )
-)
-
-# SAVE MEDIA
-app.add_handler(
-    MessageHandler(
-        filters.PHOTO
-        | filters.VIDEO
-        | filters.Document.ALL
-        | filters.AUDIO
-        | filters.ANIMATION,
-        save_media
-    )
-)
-
-# CREATE CODE
-app.add_handler(
-    CallbackQueryHandler(
-        create_code,
-        pattern="create_code"
-    )
-)
-
-# PAGE
-app.add_handler(
-    CallbackQueryHandler(
-        page_callback,
-        pattern="^page_"
-    )
-)
-
-# CHECK JOIN
-app.add_handler(
-    CallbackQueryHandler(
-        check_join,
-        pattern="check_join"
-    )
-)
-
-# TEXT
-app.add_handler(
-    MessageHandler(
-        filters.TEXT
-        & ~filters.COMMAND,
-        text_handler
-    )
-)
-
-print("KXBOT RUNNING...")
-
-app.run_polling()
+# =========== 
