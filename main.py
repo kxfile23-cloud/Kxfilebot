@@ -603,10 +603,15 @@ async def open_code(
 
         ids = decode_code(code)
 
-    except:
+    except Exception as e:
 
         return await update.message.reply_text(
-            "❌ Invalid code"
+f"""
+❌ Invalid / Old Code
+
+Reason:
+{e}
+"""
         )
 
     user_id = update.effective_user.id
