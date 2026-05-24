@@ -7,41 +7,29 @@ from services.force_sub import force_sub, join_keyboard
 ADMIN_IDS = [8603038811]  # ganti ID kamu
 
 
+from telegram import ReplyKeyboardMarkup
+
 def main_menu():
-    return InlineKeyboardMarkup([
+    return ReplyKeyboardMarkup(
         [
-            InlineKeyboardButton("📥 Get File", callback_data="get_file"),
-            InlineKeyboardButton("📤 Up File", callback_data="up_file")
+            ["📥 Get File", "📤 Up File"],
+            ["👤 Account", "🆘 Help"],
+            ["💎 VIP", "👑 VVIP"]
         ],
-        [
-            InlineKeyboardButton("👤 Account", callback_data="account"),
-            InlineKeyboardButton("🆘 Help", callback_data="help")
-        ],
-        [
-            InlineKeyboardButton("💎 VIP", callback_data="vip"),
-            InlineKeyboardButton("👑 VVIP", callback_data="vvip")
-        ]
-    ])
+        resize_keyboard=True
+    )
 
 
 def admin_menu():
-    return InlineKeyboardMarkup([
+    return ReplyKeyboardMarkup(
         [
-            InlineKeyboardButton("📥 Get File", callback_data="get_file"),
-            InlineKeyboardButton("📤 Up File", callback_data="up_file")
+            ["📥 Get File", "📤 Up File"],
+            ["👤 Account", "💹 Statistik"],
+            ["💎 VIP User", "👑 VVIP User"],
+            ["✖️ Unvip User"]
         ],
-        [
-            InlineKeyboardButton("👤 Account", callback_data="account"),
-            InlineKeyboardButton("💹 Statistik", callback_data="stats")
-        ],
-        [
-            InlineKeyboardButton("💎 VIP User", callback_data="vip_user"),
-            InlineKeyboardButton("👑 VVIP User", callback_data="vvip_user")
-        ],
-        [
-            InlineKeyboardButton("✖️ Unvip User", callback_data="unvip")
-        ]
-    ])
+        resize_keyboard=True
+    )
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
