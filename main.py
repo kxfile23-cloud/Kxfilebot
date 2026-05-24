@@ -1,5 +1,4 @@
 import logging
-import traceback
 import os
 import sys
 
@@ -19,7 +18,7 @@ logging.basicConfig(
 
 print("STARTING BOT...")
 
-# ================= LOCK SYSTEM =================
+# ================= LOCK =================
 LOCK_FILE = "bot.lock"
 
 if os.path.exists(LOCK_FILE):
@@ -39,21 +38,22 @@ try:
     app = Application.builder().token(BOT_TOKEN).build()
 
     print("APPLICATION SUCCESS")
+
+    # ORDER YANG AMAN
+    app.add_handler(start_handler)
+
     app.add_handler(up_file_callback)
     app.add_handler(done_upload)
     app.add_handler(cancel_upload)
     app.add_handler(handle_media)
-    app.add_handler(start_handler)
 
     print("HANDLER SUCCESS")
-
     print("BOT RUNNING...")
 
     app.run_polling(drop_pending_updates=True)
 
 except Exception as e:
     logging.exception("BOT ERROR OCCURRED")
-    print("\nERROR MESSAGE:")
     print(str(e))
 
 finally:
