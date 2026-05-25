@@ -5,7 +5,6 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CallbackQueryHandler, MessageHandler, filters
 
 UPLOAD_SESSION = {}
-
 LOG_CHANNEL = -1003993516320
 
 
@@ -15,14 +14,17 @@ async def up_file_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
 
-    UPLOAD_SESSION[user_id] = {"files": []}
+    UPLOAD_SESSION[user_id] = {
+        "files": [],
+        "active": True
+    }
 
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("❌ Cancel", callback_data="cancel_upload")]
     ])
 
     await query.message.edit_text(
-        "📤 KIRIM MEDIA SEKARANG (PHOTO / VIDEO / DOCUMENT)",
+        "📤 SILAKAN KIRIM MEDIA SEKARANG",
         reply_markup=keyboard
     )
 
@@ -38,6 +40,9 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     session = UPLOAD_SESSION[user_id]
+
+    if not session.get("active"):
+        return
 
     file_id = None
     mtype = None
@@ -61,8 +66,6 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     total = len(session["files"])
 
-    bar = "█" * (total % 10) + "░" * (10 - (total % 10))
-
     keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton("✅ DONE", callback_data="done_upload"),
@@ -71,7 +74,7 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ])
 
     await update.message.reply_text(
-        f"📦 UPLOADING...\n[{bar}]\nTotal: {total}",
+        f"📦 UPLOADING...\nTotal: {total}",
         reply_markup=keyboard
     )
 
@@ -91,9 +94,7 @@ def generate_code(files):
     mix = f"{v}v_{p}p_{d}d"
     rand = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
 
-    code = f"kxfilebot_{len(files)}V_{rand}"
-
-    return mix, code
+    return mix, f"kxfilebot_{len(files)}V_{rand}"
 
 
 # ================= DONE =================
@@ -105,9 +106,59 @@ async def done_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session = UPLOAD_SESSION.get(user_id)
 
     if not session:
-        await query.answer("No session")
+        await query.answer()
         return
 
+    files = session["files"]
+
+    mix, code = generate_code(files)
+
+    await context.bot.send_message(
+        chat_id=LOG_CHANNEL,
+        text=f"""
+📥 NEW UPLOAD
+
+Code: {code}
+Mix: {mix}
+Total: {len(files)}
+User: {user_id}
+"""
+    )
+
+    await query.message.edit_text(
+        f"""
+📥 UPLOAD SELESAI
+
+Code: {code}
+Total: {len(files)}
+"""
+    )
+
+    UPLOAD_SESSION.pop(user_id, None)
+
+    await query.answer()
+
+
+# ================= CANCEL =================
+async def cancel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    query = update.callback_query
+    UPLOAD_SESSION.pop(query.from_user.id, None)
+
+    await query.message.edit_text("❌ UPLOAD DIBATALKAN")
+
+    await query.answer()
+
+
+# ================= HANDLERS =================
+up_file_callback_handler = CallbackQueryHandler(up_file_callback, pattern="up_file")
+done_upload_handler = CallbackQueryHandler(done_upload, pattern="done_upload")
+cancel_upload_handler = CallbackQueryHandler(cancel_upload, pattern="cancel_upload")
+
+handle_media_handler = MessageHandler(
+    filters.PHOTO | filters.VIDEO | filters.Document.ALL,
+    handle_media
+    )
     files = session["files"]
 
     mix, code = generate_code(files)
