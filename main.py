@@ -11,14 +11,15 @@ from handlers.upload import (
     handle_media_handler
 )
 
+# ================= LOGGING =================
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - message)s",
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 
 print("STARTING BOT...")
 
-# ================= LOCK (SAFE FOR RAILWAY) =================
+# ================= LOCK (RAILWAY SAFE) =================
 LOCK_FILE = "/tmp/bot.lock"
 
 if os.path.exists(LOCK_FILE):
@@ -35,10 +36,15 @@ if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN is missing!")
 
 try:
-    app = Application.builder().token(BOT_TOKEN).concurrent_updates(True).build()
+    # ================= APPLICATION =================
+    app = Application.builder() \
+        .token(BOT_TOKEN) \
+        .concurrent_updates(True) \
+        .build()
 
     print("APPLICATION SUCCESS")
 
+    # ================= HANDLERS =================
     app.add_handler(start_handler)
 
     app.add_handler(up_file_callback_handler)
@@ -49,12 +55,16 @@ try:
     print("HANDLER SUCCESS")
     print("BOT RUNNING...")
 
-    app.run_polling(drop_pending_updates=True)
+    # ================= RUN BOT =================
+    app.run_polling(
+        drop_pending_updates=True
+    )
 
 except Exception as e:
     logging.exception("BOT ERROR OCCURRED")
     print(str(e))
 
 finally:
+    # ================= CLEAN LOCK =================
     if os.path.exists(LOCK_FILE):
         os.remove(LOCK_FILE)
