@@ -1,14 +1,14 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler
 
 from database import supabase
 from services.force_sub import force_sub, join_keyboard
 
+# ================= ADMIN =================
 ADMIN_IDS = [8603038811]  # ganti ID kamu
 
 
-from telegram import ReplyKeyboardMarkup
-
+# ================= MENUS =================
 def main_menu():
     return ReplyKeyboardMarkup(
         [
@@ -32,33 +32,49 @@ def admin_menu():
     )
 
 
+# ================= START COMMAND =================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.effective_user
 
-    cek_join = await force_sub(context.bot, user.id)
+    # ================= FORCE SUB =================
+    try:
+        cek_join = await force_sub(context.bot, user.id)
+    except Exception:
+        cek_join = True  # fallback biar bot tidak mati
 
     if not cek_join:
         await update.message.reply_text(
-            "🚫 JOIN CHANNEL DULU",
+            "🚫 JOIN CHANNEL DULU UNTUK MENGGUNAKAN BOT",
             reply_markup=join_keyboard()
         )
         return
 
-    cek = supabase.table("users") \
-        .select("*") \
-        .eq("id", user.id) \
-        .execute()
+    # ================= USER CHECK / INSERT =================
+    try:
+        cek = supabase.table("users") \
+            .select("*") \
+            .eq("id", user.id) \
+            .execute()
 
-    if not cek.data:
-        supabase.table("users").insert({
-            "id": user.id,
-            "username": user.username,
-            "first_name": user.first_name
-        }).execute()
+        if not cek.data:
+            supabase.table("users").insert({
+                "id": user.id,
+                "username": user.username,
+                "first_name": user.first_name
+            }).execute()
 
-    teks = "🔥 WELCOME TO FILE BOT 🔥"
+    except Exception as e:
+        print("SUPABASE ERROR:", e)
 
+    # ================= TEXT =================
+    teks = (
+        "🔥 WELCOME TO FILE BOT 🔥\n\n"
+        "📥 Upload media jadi code\n"
+        "📤 Get file pakai code\n"
+    )
+
+    # ================= MENU =================
     if user.id in ADMIN_IDS:
         await update.message.reply_text(
             teks,
@@ -71,4 +87,5 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
+# ================= HANDLER =================
 start_handler = CommandHandler("start", start)
