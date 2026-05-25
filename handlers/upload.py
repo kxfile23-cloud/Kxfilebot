@@ -12,7 +12,7 @@ from telegram.ext import (
 # ================= SESSION =================
 UPLOAD_SESSION = {}
 
-LOG_CHANNEL = -1003993516320  # log channel kamu
+LOG_CHANNEL = -1003993516320
 
 
 # ================= START UPLOAD =================
@@ -23,20 +23,23 @@ async def up_file_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     UPLOAD_SESSION[user_id] = {
         "files": [],
-        "active": True
+        "active": True,
+        "msg_id": None
     }
 
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("❌ Cancel", callback_data="cancel_upload")],
         [
-            InlineKeyboardButton("✅ DONE", callback_data="done_upload")
+            InlineKeyboardButton("✅ DONE", callback_data="done_upload"),
+            InlineKeyboardButton("❌ CANCEL", callback_data="cancel_upload")
         ]
     ])
 
-    await query.message.edit_text(
+    msg = await query.message.edit_text(
         "📤 SILAKAN KIRIM MEDIA (PHOTO / VIDEO / DOCUMENT)",
         reply_markup=keyboard
     )
+
+    UPLOAD_SESSION[user_id]["msg_id"] = msg.message_id
 
     await query.answer()
 
@@ -79,17 +82,21 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     total = len(session["files"])
 
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("✅ DONE", callback_data="done_upload"),
-            InlineKeyboardButton("❌ CANCEL", callback_data="cancel_upload")
-        ]
-    ])
-
-    await update.message.reply_text(
-        f"📦 UPLOADING...\nTotal Media: {total}",
-        reply_markup=keyboard
-    )
+    # EDIT MESSAGE (ANTI SPAM)
+    try:
+        await context.bot.edit_message_text(
+            chat_id=update.effective_chat.id,
+            message_id=session["msg_id"],
+            text=f"📦 UPLOADING...\nTotal Media: {total}",
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("✅ DONE", callback_data="done_upload"),
+                    InlineKeyboardButton("❌ CANCEL", callback_data="cancel_upload")
+                ]
+            ])
+        )
+    except:
+        pass
 
     try:
         await update.message.delete()
@@ -107,7 +114,6 @@ def generate_code(files):
     rand = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
 
     code = f"kxfilebot_{len(files)}V_{rand}"
-
     mix = f"{v}v_{p}p_{d}d"
 
     return mix, code
@@ -129,7 +135,6 @@ async def done_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     mix, code = generate_code(files)
 
-    # ================= LOG CHANNEL =================
     await context.bot.send_message(
         chat_id=LOG_CHANNEL,
         text=f"""
@@ -142,7 +147,6 @@ User: {user_id}
 """
     )
 
-    # ================= RESPONSE =================
     await query.message.edit_text(
         f"""
 📥 UPLOAD SELESAI
