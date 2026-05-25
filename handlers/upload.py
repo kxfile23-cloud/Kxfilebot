@@ -2,10 +2,17 @@ import random
 import string
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes, CallbackQueryHandler, MessageHandler, filters
+from telegram.ext import (
+    ContextTypes,
+    CallbackQueryHandler,
+    MessageHandler,
+    filters
+)
 
+# ================= SESSION =================
 UPLOAD_SESSION = {}
-LOG_CHANNEL = -1003993516320
+
+LOG_CHANNEL = -1003993516320  # ganti sesuai channel kamu
 
 
 # ================= START UPLOAD =================
@@ -24,7 +31,7 @@ async def up_file_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ])
 
     await query.message.edit_text(
-        "📤 SILAKAN KIRIM MEDIA SEKARANG",
+        "📤 KIRIM MEDIA SEKARANG (PHOTO / VIDEO / DOCUMENT)",
         reply_markup=keyboard
     )
 
@@ -62,7 +69,10 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not file_id:
         return
 
-    session["files"].append({"file_id": file_id, "type": mtype})
+    session["files"].append({
+        "file_id": file_id,
+        "type": mtype
+    })
 
     total = len(session["files"])
 
@@ -74,7 +84,7 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ])
 
     await update.message.reply_text(
-        f"📦 UPLOADING...\nTotal: {total}",
+        f"📦 UPLOADING...\nTotal Media: {total}",
         reply_markup=keyboard
     )
 
@@ -92,12 +102,15 @@ def generate_code(files):
     d = sum(1 for x in files if x["type"] == "d")
 
     mix = f"{v}v_{p}p_{d}d"
+
     rand = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
 
-    return mix, f"kxfilebot_{len(files)}V_{rand}"
+    code = f"kxfilebot_{len(files)}V_{rand}"
+
+    return mix, code
 
 
-# ================= DONE =================
+# ================= DONE UPLOAD =================
 async def done_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
@@ -106,17 +119,18 @@ async def done_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session = UPLOAD_SESSION.get(user_id)
 
     if not session:
-        await query.answer()
+        await query.answer("No session")
         return
 
     files = session["files"]
 
     mix, code = generate_code(files)
 
+    # send log
     await context.bot.send_message(
         chat_id=LOG_CHANNEL,
         text=f"""
-📥 NEW UPLOAD
+📥 NEW UPLOAD LOG
 
 Code: {code}
 Mix: {mix}
@@ -130,7 +144,8 @@ User: {user_id}
 📥 UPLOAD SELESAI
 
 Code: {code}
-Total: {len(files)}
+Mix: {mix}
+Total Media: {len(files)}
 """
     )
 
@@ -139,10 +154,11 @@ Total: {len(files)}
     await query.answer()
 
 
-# ================= CANCEL =================
+# ================= CANCEL UPLOAD =================
 async def cancel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
+
     UPLOAD_SESSION.pop(query.from_user.id, None)
 
     await query.message.edit_text("❌ UPLOAD DIBATALKAN")
@@ -150,55 +166,21 @@ async def cancel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
 
-# ================= HANDLERS =================
-up_file_callback_handler = CallbackQueryHandler(up_file_callback, pattern="up_file")
-done_upload_handler = CallbackQueryHandler(done_upload, pattern="done_upload")
-cancel_upload_handler = CallbackQueryHandler(cancel_upload, pattern="cancel_upload")
+# ================= HANDLERS EXPORT =================
+up_file_callback_handler = CallbackQueryHandler(
+    up_file_callback,
+    pattern="up_file"
+)
 
-handle_media_handler = MessageHandler(
-    filters.PHOTO | filters.VIDEO | filters.Document.ALL,
-    handle_media
-    )
-    files = session["files"]
+done_upload_handler = CallbackQueryHandler(
+    done_upload,
+    pattern="done_upload"
+)
 
-    mix, code = generate_code(files)
-
-    await context.bot.send_message(
-        chat_id=LOG_CHANNEL,
-        text=f"""
-📥 NEW UPLOAD
-
-Code: {code}
-Mix: {mix}
-Total: {len(files)}
-User: {user_id}
-"""
-    )
-
-    await query.message.edit_text(
-        f"📥 DONE\nCode: {code}\nTotal: {len(files)}"
-    )
-
-    UPLOAD_SESSION.pop(user_id, None)
-
-    await query.answer()
-
-
-# ================= CANCEL =================
-async def cancel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    query = update.callback_query
-    UPLOAD_SESSION.pop(query.from_user.id, None)
-
-    await query.message.edit_text("❌ CANCELLED")
-
-    await query.answer()
-
-
-# ================= HANDLERS (FIX PENTING) =================
-up_file_callback_handler = CallbackQueryHandler(up_file_callback, pattern="up_file")
-done_upload_handler = CallbackQueryHandler(done_upload, pattern="done_upload")
-cancel_upload_handler = CallbackQueryHandler(cancel_upload, pattern="cancel_upload")
+cancel_upload_handler = CallbackQueryHandler(
+    cancel_upload,
+    pattern="cancel_upload"
+)
 
 handle_media_handler = MessageHandler(
     filters.PHOTO | filters.VIDEO | filters.Document.ALL,
