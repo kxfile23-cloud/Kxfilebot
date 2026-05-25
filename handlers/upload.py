@@ -12,7 +12,7 @@ from telegram.ext import (
 # ================= SESSION =================
 UPLOAD_SESSION = {}
 
-LOG_CHANNEL = -1003993516320  # ganti sesuai channel kamu
+LOG_CHANNEL = -1003993516320  # log channel kamu
 
 
 # ================= START UPLOAD =================
@@ -27,11 +27,14 @@ async def up_file_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("❌ Cancel", callback_data="cancel_upload")]
+        [InlineKeyboardButton("❌ Cancel", callback_data="cancel_upload")],
+        [
+            InlineKeyboardButton("✅ DONE", callback_data="done_upload")
+        ]
     ])
 
     await query.message.edit_text(
-        "📤 KIRIM MEDIA SEKARANG (PHOTO / VIDEO / DOCUMENT)",
+        "📤 SILAKAN KIRIM MEDIA (PHOTO / VIDEO / DOCUMENT)",
         reply_markup=keyboard
     )
 
@@ -101,11 +104,11 @@ def generate_code(files):
     p = sum(1 for x in files if x["type"] == "p")
     d = sum(1 for x in files if x["type"] == "d")
 
-    mix = f"{v}v_{p}p_{d}d"
-
     rand = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
 
     code = f"kxfilebot_{len(files)}V_{rand}"
+
+    mix = f"{v}v_{p}p_{d}d"
 
     return mix, code
 
@@ -126,7 +129,7 @@ async def done_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     mix, code = generate_code(files)
 
-    # send log
+    # ================= LOG CHANNEL =================
     await context.bot.send_message(
         chat_id=LOG_CHANNEL,
         text=f"""
@@ -139,6 +142,7 @@ User: {user_id}
 """
     )
 
+    # ================= RESPONSE =================
     await query.message.edit_text(
         f"""
 📥 UPLOAD SELESAI
@@ -146,6 +150,8 @@ User: {user_id}
 Code: {code}
 Mix: {mix}
 Total Media: {len(files)}
+
+Status: SUCCESS ✅
 """
     )
 
@@ -166,7 +172,7 @@ async def cancel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
 
-# ================= HANDLERS EXPORT =================
+# ================= HANDLERS =================
 up_file_callback_handler = CallbackQueryHandler(
     up_file_callback,
     pattern="up_file"
