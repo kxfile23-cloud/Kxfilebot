@@ -5,10 +5,10 @@ import sys
 from telegram.ext import Application
 from handlers.start import start_handler
 from handlers.upload import (
-    up_file_callback,
-    done_upload,
-    cancel_upload,
-    handle_media
+    up_file_callback_handler,
+    done_upload_handler,
+    cancel_upload_handler,
+    handle_media_handler
 )
 
 logging.basicConfig(
@@ -39,13 +39,12 @@ try:
 
     print("APPLICATION SUCCESS")
 
-    # ORDER YANG AMAN
     app.add_handler(start_handler)
 
-    app.add_handler(up_file_callback)
-    app.add_handler(done_upload)
-    app.add_handler(cancel_upload)
-    app.add_handler(handle_media)
+    app.add_handler(up_file_callback_handler)
+    app.add_handler(done_upload_handler)
+    app.add_handler(cancel_upload_handler)
+    app.add_handler(handle_media_handler)
 
     print("HANDLER SUCCESS")
     print("BOT RUNNING...")
