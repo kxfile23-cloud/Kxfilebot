@@ -12,14 +12,14 @@ from handlers.upload import (
 )
 
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    format="%(asctime)s - %(name)s - %(levelname)s - message)s",
     level=logging.INFO
 )
 
 print("STARTING BOT...")
 
-# ================= LOCK =================
-LOCK_FILE = "bot.lock"
+# ================= LOCK (SAFE FOR RAILWAY) =================
+LOCK_FILE = "/tmp/bot.lock"
 
 if os.path.exists(LOCK_FILE):
     print("BOT SUDAH BERJALAN! STOP DUPLICATE INSTANCE.")
@@ -35,7 +35,7 @@ if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN is missing!")
 
 try:
-    app = Application.builder().token(BOT_TOKEN).build()
+    app = Application.builder().token(BOT_TOKEN).concurrent_updates(True).build()
 
     print("APPLICATION SUCCESS")
 
