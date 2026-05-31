@@ -419,7 +419,7 @@ def generate_code(v, p, d):
 
     rand = hashlib.sha1(base.encode()).hexdigest()[:12]
 
-    return f"tzy_{v}v_{p}p_{d}d_{rand}"
+    return f"kxfilebot_{v}v_{p}p_{d}d_{rand}"
 
 # =========================
 # DONE
@@ -524,7 +524,7 @@ async def done(call: CallbackQuery):
         f"📦 Total File : {total_items}\n"
         f"💾 Size      : {round(total_size / (1024 * 1024), 2)} MB\n\n"
         "📦 File sudah tersimpan Di Hati😍\n"
-        "🤖 Bot: tzyfilerobot",
+        "🤖 Bot: kxfilebot",
         parse_mode="HTML"
     )
 # =========================
