@@ -41,8 +41,8 @@ async def start(message: Message):
 
     if not joined:
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📢 Join Channel", url="https://t.me/c/3712587847")],
-            [InlineKeyboardButton(text="👥 Join Group", url="https://t.me/c/3920865154")],
+            [InlineKeyboardButton(text="📢 Join Channel", url="https://t.me/+OzP85qRqCUhjMDE1")],
+            [InlineKeyboardButton(text="👥 Join Group", url="https://t.me/+DTL9cOR34ipmM2U1")],
             [InlineKeyboardButton(text="🔄 Cek Join", callback_data="check_join")]
         ])
 
