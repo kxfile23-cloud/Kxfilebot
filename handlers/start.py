@@ -4,8 +4,8 @@ from db import supabase
 
 router = Router()
 
-CHANNEL_ID = -100377710700
-GROUP_ID = -100372100935
+CHANNEL_ID = -1003777107004
+GROUP_ID = -1003721009353
 
 
 # =========================
