@@ -47,8 +47,8 @@ async def start(message: Message):
             "⚠️ Join Terlebih Dahulu sebelum menggunakan bot\n\n"
             "˗ˏˋ © EarnFileBot ˎˊ˗",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="📢 Join Channel", url="https://t.me/your_channel")],
-                [InlineKeyboardButton(text="👥 Join Group", url="https://t.me/your_group")],
+                [InlineKeyboardButton(text="📢 Join Channel", url="https://t.me/+OzP85qRqCUhjMDE1")],
+                [InlineKeyboardButton(text="👥 Join Group", url="https://t.me/+DTL9cOR34ipmM2U1")],
                 [InlineKeyboardButton(text="🔄 Cek Join", callback_data="check_join")]
             ])
         )
